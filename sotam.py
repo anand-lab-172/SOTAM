@@ -122,15 +122,17 @@ class VLSTM:
         
         fig = go.Figure()
 
+        epochs = list(range(1, len(history.history['loss']) + 1))
+        
         fig.add_trace(go.Scatter(
-            x=list(range(len(history.history['loss']))), 
-            y= history.history['loss'], 
+            x=epochs, 
+            y=history.history['loss'], 
             mode='lines+markers', 
             name='Loss History', 
             line=dict(color='cadetblue')))
         
         fig.add_trace(go.Scatter(
-            x=list(range(len(history.history['val_loss']))),
+            x=epochs,
             y=history.history['val_loss'],
             mode='lines',
             name='Validation Loss',
@@ -143,12 +145,14 @@ class VLSTM:
             legend=dict(x=0, y=1.0),
             width=1000,
             height=600,
-            xaxis=dict(tickmode='array', tickvals=list(range(len(history.history['loss']) + 1))),
+            xaxis=dict(
+                tickmode='array', 
+                tickvals=epochs
+            ),
             yaxis=dict(gridcolor='lightgrey'),
-            plot_bgcolor='white')
+            plot_bgcolor='white'
+        )
         fig.show()
-
-###
 
     def prediction_plot(self, y_test, y_pred):
         fig = go.Figure()
@@ -183,4 +187,5 @@ class VLSTM:
 # lstm = LSTM_Model(target='Close')
 # history, y_test_actual, y_pred_actual, r2_train, r2_test = lstm.train_and_evaluate(data, features)
 # predictions = lstm.predict(new_data, features)
-# lstm.plot()
+# lstm.plot_loss(history)
+# lstm.prediction_plot(y_test, y_pred)
