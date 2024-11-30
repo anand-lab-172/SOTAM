@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
-from sklearn.metrics import r2_score
+from sklearn.metrics import r2_score, mean_absolute_error, mean_squared_error
 import tensorflow as tf
 from keras.models import Sequential, load_model
 from keras.layers import LSTM, Dense, Dropout, Input
@@ -53,7 +53,7 @@ class VLSTM:
         self.early_stopping = early_stopping
         self.patience = patience
 
-        allowed_losses = ['mae', 'mse', 'mape','mad']
+        allowed_losses = ['mae', 'mse', 'mape', 'mad', 'rmse']
         if loss in allowed_losses:
             self.loss = loss
         else:
@@ -166,10 +166,10 @@ class VLSTM:
         y_train_actual = self.scalers[self.target].inverse_transform(y_train.reshape(-1, 1)).flatten()
         y_train_pred_actual = self.scalers[self.target].inverse_transform(y_train_pred).flatten()
 
-        r2_train = r2_score(y_train_actual, y_train_pred_actual)
-        r2_test = r2_score(y_test_actual, y_pred_actual)
+        train_score = r2_score(y_train_actual, y_train_pred_actual)*100
+        test_score = r2_score(y_test_actual, y_pred_actual)*100
 
-        return self.history, y_test_actual, y_pred_actual, r2_train, r2_test
+        return self.history, y_test_actual, y_pred_actual, train_score, test_score
 
     def predict(self, data, features):
         """
@@ -196,6 +196,35 @@ class VLSTM:
         y_cust_pred = self.scalers[self.target].inverse_transform(y_pred).flatten()
         return y_cust_pred
     
+    def evaluate(self, y_actual, y_pred):
+        """
+        Evaluate the model's performance using MAE, RMSE, R², MAPE, and MAD metrics.
+
+        Parameters:
+            y_actual (np.ndarray): The actual target values.
+            y_pred (np.ndarray): The predicted target values.
+
+        Returns:
+            dict: A dictionary containing MAE, RMSE, R², MAPE, and MAD scores.
+        """
+        # Ensure no division by zero in MAPE calculation
+        non_zero_indices = y_actual != 0
+
+        mae = mean_absolute_error(y_actual, y_pred)
+        rmse = np.sqrt(mean_squared_error(y_actual, y_pred))
+        r2 = r2_score(y_actual, y_pred)
+        mape = (np.mean(np.abs((y_actual[non_zero_indices] - y_pred[non_zero_indices]) / y_actual[non_zero_indices])) * 100 
+                if np.any(non_zero_indices) else np.inf)
+        mad = np.mean(np.abs(y_actual - y_pred))
+
+        print(f"Evaluation Metrics:\n"
+              f"Mean Absolute Error (MAE): {mae:.4f}\n"
+              f"Mean Absolute Percentage Error (MAPE): {mape:.4f}%\n"
+              f"Mean Absolute Deviation (MAD): {mad:.4f}\n"
+              f"Root Mean Squared Error (RMSE): {rmse:.4f}")
+        
+        return {'MAE': mae, 'MAPE': mape, 'MAD': mad, 'RMSE': rmse}
+    
     def summary(self):
         """
         To print the summary of the best model which is saved.
@@ -220,7 +249,7 @@ class VLSTM:
             x=epochs, 
             y=history.history['loss'], 
             mode='lines+markers', 
-            name='Loss History', 
+            name='Train Loss', 
             line=dict(color='cadetblue')))
         
         fig.add_trace(go.Scatter(
@@ -283,9 +312,10 @@ class VLSTM:
         pio.show(fig)
 
 # Example usage:
-# vlstm = LSTM_Model(target='Close')
-# history, y_test_actual, y_pred_actual, r2_train, r2_test = vlstm.train_and_evaluate(data, features)
+# vlstm = VLSTM(target='Close')
+# history, y_test, y_pred, train_score, test_score = vlstm.train(df, top_features)
 # vlstm.summary()
-# predictions = vlstm.predict(new_data, features)
+# predictions = vlstm.predict(new_df, features)
+# vlstm.evaluate(y_test, y_pred)
 # vlstm.plot_loss(history)
 # vlstm.prediction_plot(y_test, y_pred)
