@@ -1,14 +1,18 @@
 import numpy as np
 import pandas as pd
+import warnings
 from sklearn.preprocessing import MinMaxScaler
-from sklearn.metrics import r2_score, mean_absolute_error, mean_squared_error
+from sklearn.metrics import r2_score, mean_absolute_error, mean_squared_error, explained_variance_score, median_absolute_error
 import tensorflow as tf
 from keras.models import Sequential, load_model
 from keras.layers import LSTM, Dense, Dropout, Input
 from keras.optimizers import Adam
 from keras.callbacks import ModelCheckpoint, EarlyStopping
+from keras.layers import Attention
 import plotly.graph_objects as go
 import plotly.io as pio
+warnings.filterwarnings('ignore', category=DeprecationWarning)
+warnings.filterwarnings('ignore')
 
 class VLSTM:
     def __init__(self, target, sequence=30, batch_size=48, n1=300, n2=200, d1=25, d2=1, epochs=10, lr=0.001, 
@@ -53,7 +57,9 @@ class VLSTM:
         self.early_stopping = early_stopping
         self.patience = patience
 
-        allowed_losses = ['mae', 'mse', 'mape', 'mad', 'rmse']
+        allowed_losses = ['mae', 'mse', 'mape', 'msle', 'hinge', 'binary_crossentropy', 
+                   'categorical_crossentropy', 'sparse_categorical_crossentropy', 
+                   'kld', 'poisson', 'cosine_similarity', 'logcosh', 'huber']
         if loss in allowed_losses:
             self.loss = loss
         else:
@@ -63,7 +69,7 @@ class VLSTM:
         """
         Create input sequences and corresponding target values from the data.
 
-        Parameters:
+        Parameters: 
             data (pd.DataFrame): The input data.
 
         Returns:
@@ -141,20 +147,24 @@ class VLSTM:
         X_train, X_test = X[:split], X[split:]
         y_train, y_test = y[:split], y[split:]
 
-        gpus = tf.config.list_physical_devices('GPU')
-        device = 'GPU' if gpus else 'CPU'
-        print(f"Using device: {device}")
+        strategy = tf.distribute.MirroredStrategy()
+        print(f"Number of devices: {strategy.num_replicas_in_sync}")
 
-        with tf.device('/GPU:0' if tf.config.list_physical_devices('GPU') else '/CPU:0'):
+        with strategy.scope():
             self.model = self.build_model((self.sequence_length, X_train.shape[2]))
 
-            callbacks = [ModelCheckpoint(self.best_model_path, save_best_only=True, monitor='val_loss', mode='min', verbose=1)]
-            
-            if self.early_stopping:
-                callbacks.append(EarlyStopping(monitor='val_loss', patience=self.patience, verbose=1))
+        callbacks = [ModelCheckpoint(self.best_model_path, save_best_only=True, monitor='val_loss', mode='min', verbose=1)]
 
-            self.history = self.model.fit(X_train, y_train, epochs=self.epochs, batch_size=self.batch_size, validation_split=0.2, 
-                                          verbose=1, callbacks=callbacks)
+        if self.early_stopping:
+            callbacks.append(EarlyStopping(monitor='val_loss', patience=self.patience, verbose=1))
+
+        self.history = self.model.fit(
+        X_train, y_train,
+        epochs=self.epochs,
+        batch_size=self.batch_size,
+        validation_split=0.2,
+        verbose=1,
+        callbacks=callbacks)
             
         self.model = load_model(self.best_model_path)
 
@@ -198,32 +208,42 @@ class VLSTM:
     
     def evaluate(self, y_actual, y_pred):
         """
-        Evaluate the model's performance using MAE, RMSE, R², MAPE, and MAD metrics.
+        Evaluate the model's performance using MAE, RMSE, MAPE, MAD, Explained Variance, Max Error, MSE, and Median Absolute Error.
 
         Parameters:
             y_actual (np.ndarray): The actual target values.
             y_pred (np.ndarray): The predicted target values.
 
         Returns:
-            dict: A dictionary containing MAE, RMSE, R², MAPE, and MAD scores.
+            dict: A dictionary containing MAE, RMSE, MAPE, MAD, Explained Variance, Max Error, MSE, and Median Absolute Error scores.
         """
         # Ensure no division by zero in MAPE calculation
         non_zero_indices = y_actual != 0
 
+        # Calculate the metrics
         mae = mean_absolute_error(y_actual, y_pred)
         rmse = np.sqrt(mean_squared_error(y_actual, y_pred))
-        r2 = r2_score(y_actual, y_pred)
         mape = (np.mean(np.abs((y_actual[non_zero_indices] - y_pred[non_zero_indices]) / y_actual[non_zero_indices])) * 100 
                 if np.any(non_zero_indices) else np.inf)
         mad = np.mean(np.abs(y_actual - y_pred))
+        explained_variance = explained_variance_score(y_actual, y_pred)
+        max_error = np.max(np.abs(y_actual - y_pred))
+        mse = mean_squared_error(y_actual, y_pred)
+        median_absolute_error_value = median_absolute_error(y_actual, y_pred)
 
         print(f"Evaluation Metrics:\n"
-              f"Mean Absolute Error (MAE): {mae:.4f}\n"
-              f"Mean Absolute Percentage Error (MAPE): {mape:.4f}%\n"
-              f"Mean Absolute Deviation (MAD): {mad:.4f}\n"
-              f"Root Mean Squared Error (RMSE): {rmse:.4f}")
-        
-        return {'MAE': mae, 'MAPE': mape, 'MAD': mad, 'RMSE': rmse}
+            f"Mean Absolute Error (MAE): {mae:.4f}\n"
+            f"Mean Absolute Percentage Error (MAPE): {mape:.4f}%\n"
+            f"Mean Absolute Deviation (MAD): {mad:.4f}\n"
+            f"Root Mean Squared Error (RMSE): {rmse:.4f}\n"
+            f"Explained Variance Score: {explained_variance:.4f}\n"
+            f"Max Error: {max_error:.4f}\n"
+            f"Mean Squared Error (MSE): {mse:.4f}\n"
+            f"Median Absolute Error: {median_absolute_error_value:.4f}")
+
+        return {'MAE': mae, 'MAPE': mape, 'MAD': mad, 'MSE': mse, 'RMSE': rmse,
+            'Explained Variance': explained_variance, 'Max Error': max_error,
+            'Median Absolute Error': median_absolute_error_value}
     
     def summary(self):
         """
@@ -310,6 +330,32 @@ class VLSTM:
         )
 
         pio.show(fig)
+
+    def plot_metrics(self,metrics):
+        """
+        Plot error metrics comparison.
+
+        Parameters:
+            metrics (dict): A dictionary where the keys are the names of the metrics 
+                            (e.g., 'MAE', 'MAPE', 'RMSE') and the values are the corresponding 
+                            numerical values for those metrics.
+
+        The function generates a bar chart comparing different error metrics (e.g., MAE, MAPE, RMSE),
+        displaying each metric's name on the x-axis and its value on the y-axis.
+        """
+        go.Figure(go.Bar(
+            x=list(metrics.keys()),
+            y=list(metrics.values()),
+            text=[f'{v:.2f}' for v in metrics.values()],
+            textposition='auto',
+            marker_color='royalblue'
+        )).update_layout(
+            title="Error Metrics Comparison", 
+            xaxis_title="Metric", 
+            yaxis_title="Value", 
+            template="plotly_dark", 
+            bargap=0.65
+        ).show()
 
 # Example usage:
 # vlstm = VLSTM(target='Close')
