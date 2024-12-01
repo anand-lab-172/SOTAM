@@ -37,7 +37,7 @@ Its versatility makes it suitable for a wide range of real-world applications, f
 
 ---
 ## Useful links
-- Git Repo: https://github.com/anand-lab-172/STOAM
+- Git Repo: https://github.com/anand-lab-172/SOTAM
 - Developer Profile: https://www.linkedin.com/in/anandaramg
 ---
 
