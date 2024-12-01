@@ -36,6 +36,8 @@ Its versatility makes it suitable for a wide range of real-world applications, f
 - **Gaming Analytics**: Predicting user activity and in-game economic trends for better player engagement.
 
 ---
+GitHub: https://github.com/anand-lab-172/STOAM
+---
 
 ![VLSTM](https://github.com/anand-lab-172/STOAM/blob/main/vlstm_arch.png?raw=true)
 
