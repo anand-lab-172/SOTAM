@@ -1,4 +1,4 @@
-# SOTAM-VLSTM: Versatile Long Short-Term Memory for Time-Series Prediction
+# SOTAM-VLSTM: Versatile Long Short-Term Memory
 
 ## Overview
 
