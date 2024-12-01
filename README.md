@@ -57,7 +57,7 @@ Use the prepare_data() method to preprocess your data:
 
 ```bash
 vlstm = VLSTM(target='Close') # target is mandatory, pass your target feature in string
-X, y = vlstm.prepare_data(df, features = top_features) # top_features: column names
+X, y = vlstm.prepare_data(df, features = top_features) # top_features: column names (vlstm.prepare_data() is not mandatory, everything is automated on backend)
 ```
 
 ### 3. **Training the Model**
