@@ -361,6 +361,8 @@ class VLSTM:
 # vlstm = VLSTM(target='Close')
 # history, y_test, y_pred, train_score, test_score = vlstm.train(df, top_features)
 # vlstm.summary()
+# metrics = vlstm.evaluate(y_test, y_pred)
+# vlstm.plot_metrics(metrics)
 # predictions = vlstm.predict(new_df, features)
 # vlstm.evaluate(y_test, y_pred)
 # vlstm.plot_loss(history)
