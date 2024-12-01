@@ -39,7 +39,7 @@ Its versatility makes it suitable for a wide range of real-world applications, f
 GitHub: https://github.com/anand-lab-172/STOAM
 ---
 
-![VLSTM](https://github.com/anand-lab-172/STOAM/blob/main/vlstm_arc.png?raw=true)
+![VLSTM](https://github.com/anand-lab-172/STOAM/blob/main/vlstm_arch.png?raw=true)
 
 ## How to Use VLSTM
 
