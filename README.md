@@ -1,4 +1,4 @@
-# STOAM-VLSTM: Versatile Long Short-Term Memory for Time-Series Prediction
+# SOTAM-VLSTM: Versatile Long Short-Term Memory for Time-Series Prediction
 
 ## Overview
 
@@ -10,7 +10,7 @@ Its versatility makes it suitable for a wide range of real-world applications, f
 - **Customizable LSTM architecture**: Choose the number of layers, units, and other hyperparameters.
 - **Data preprocessing**: Automatic scaling of features using MinMaxScaler to improve model performance.
 - **Training optimization**: Includes ModelCheckpoint and EarlyStopping to prevent overfitting and save time.
-- **Dynamic GPU/CPU selection**: Automatically adjusts training resources for faster execution.
+- **Dynamic GPU/CPU selection with MirroredStrategy**:  If GPUs are available, training is distributed across multiple GPUs; otherwise, it defaults to CPU for training.
 - **Prediction-ready**: Seamlessly make predictions on new data.
 - **Comprehensive evaluation**: Use multiple metrics like MAE, RMSE, MAPE, and MAD for performance assessment.
 - **Interactive visualizations**: Plot training loss and predictions using Plotly for better insight into model performance.
@@ -56,29 +56,29 @@ Your dataset should be in a Pandas DataFrame (df) format with:
 Use the prepare_data() method to preprocess your data:
 
 ```bash
-vlstm = VLSTM(target='Close')
-X, y = vlstm.prepare_data(df, features=['Open', 'High', 'Low', 'Close'])
+vlstm = VLSTM(target='Close') # target is mandatory, pass your target feature in string
+X, y = vlstm.prepare_data(df, features = top_features) # top_features: column names
 ```
 
 ### 3. **Training the Model**
 Once the data is ready, train the model using the train() method:
 
 ```bash
-history, y_test, y_pred, train_score, test_score = vlstm.train(df, features=['Open', 'High', 'Low', 'Close'])
+history, y_test, y_pred, train_score, test_score = vlstm.train(df, features = top_features) # top_features: column names
 ```
 
 ### 4. **Evaluating the Model**
 After training, evaluate the model's performance using various metrics such as MAE, RMSE, MAPE, and MAD:
 
 ```bash
-vlstm.evaluate(y_test, y_pred)
+vlstm.evaluate(y_test, y_pred) # get various evaluation metrics
 ```
 
 ### 5. **Making Predictions**
 To make predictions on new data:
 
 ```bash
-predictions = vlstm.predict(new_df, features=['Open', 'High', 'Low', 'Close'])
+predictions = vlstm.predict(new_df, features = top_features) # top_features: column names
 ```
 
 ### 6. **Visualizing Results**
@@ -106,13 +106,13 @@ The VLSTM architecture consists of two LSTM layers followed by a Dense layer and
 | **Model Customization**   | Highly customizable: sequence length, number of layers, units, dropout, etc. | Limited customization, usually one or two LSTM layers with default configurations. |
 | **Data Preprocessing**    | Automatic MinMax scaling of features and dynamic handling of the target feature. | Requires manual data preprocessing and scaling of features.              |
 | **Training Optimization** | Includes ModelCheckpoint and EarlyStopping to improve training efficiency and prevent overfitting. | Usually lacks these optimizations, leading to potential overfitting or inefficient training. |
-| **GPU/CPU Optimization**  | Dynamic selection of GPU or CPU for training, improving resource utilization. | Often defaults to CPU with limited GPU support.                          |
-| **Evaluation Metrics**    | Provides detailed metrics: MAE, RMSE, MAPE, MAD for robust model evaluation.  | Often limited to basic metrics like MSE or accuracy.                     |
+| **GPU/CPU Optimization**  |Uses **MirroredStrategy** for distributed training across multiple GPUs if available; defaults to CPU when no GPU is detected.| Often defaults to CPU with limited GPU support.                          |
+| **Evaluation Metrics**    | Provides detailed metrics: MAE, MAPE, MAD for robust model evaluation.  | Often limited to basic metrics like MSE or accuracy.                     |
 | **Prediction Readiness**  | Seamless transition for making predictions on new data with fitted scalers.   | Manual scaling required for prediction, making it less convenient.       |
 | **Model Saving and Deployment** | Saves the best model automatically for deployment and inference.                  | Requires manual saving/loading of the model, less convenient for deployment. |
 | **Training Time**         | ~30-50% faster due to optimizations                                          | Slower due to lack of optimizations.                                      |
 | **Accuracy (R² Score)**   | ~98-99%                                                                      | ~97-98%.                                                                  |
-| **Ease of Use**           | High: Automates preprocessing, model saving/loading, and hardware selection. | Medium: Requires manual intervention for many steps.                      |
+| **Ease of Use**           | High: Automates preprocessing, model saving/loading, hardware selection, and multi-GPU support. | Medium: Requires manual intervention for many steps.                      |
 
 
 ## Why VLSTM is Better than Traditional LSTM:
