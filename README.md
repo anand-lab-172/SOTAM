@@ -43,7 +43,7 @@ Its versatility makes it suitable for a wide range of real-world applications, f
 - Developer Profile: https://www.linkedin.com/in/anandaramg
 ---
 
-![VLSTM](https://github.com/anand-lab-172/SOTAM/blob/main/vlstmarch.png?raw=true)
+![VLSTM](https://github.com/anand-lab-172/SOTAM/blob/main/vlstm_arch.png?raw=true)
 
 ## How to Use VLSTM
 
