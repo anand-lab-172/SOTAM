@@ -77,7 +77,8 @@ history, y_test, y_pred, train_score, test_score = vlstm.train(df, features = to
 After training, evaluate the model's performance using various metrics such as MAE, RMSE, MAPE, and MAD:
 
 ```bash
-vlstm.evaluate(y_test, y_pred) # get various evaluation metrics
+metrics = vlstm.evaluate(y_test, y_pred)
+vlstm.plot_metrics(metrics)
 ```
 
 ### 5. **Making Predictions**
@@ -87,12 +88,21 @@ To make predictions on new data:
 predictions = vlstm.predict(new_df, features = top_features) # top_features: column names
 ```
 
-### 6. **Visualizing Results**
-You can visualize training loss and the actual vs predicted values:
+### 6. **Forecasting**
+Forecast the future trend.
+
+```bash
+vlstm.forecast(df, top_features, 10, noise_factor=0.025)  # Forecast the next 10 time steps.
+# The 'noise_factor' adds simulated random variations (default is 0.2). You can adjust it to 0 for no noise or change it to simulate more realistic fluctuations in the forecast.
+```
+
+### 7. **Visualizing Results**
+You can visualize training loss, the actual vs predicted values and Forecast:
 
 ```bash
 vlstm.plot_loss(history)
 vlstm.prediction_plot(y_test, y_pred)
+vlstm.plot_forecast(df,top_features,30,noise_factor=0.025)
 ```
 
 ## Model Architecture
