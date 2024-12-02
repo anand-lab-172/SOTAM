@@ -69,13 +69,17 @@ class VLSTM:
         """
         Create input sequences and corresponding target values from the data.
 
-        Parameters: 
+        Parameters:
             data (pd.DataFrame): The input data.
 
         Returns:
             tuple: Input sequences (xs) and target values (ys).
         """
         data_values = data.values.astype('float32')
+        # Check if there are enough samples to create sequences
+        if len(data) <= self.sequence_length:
+            raise ValueError(f"Not enough data to create sequences. Minimum data length should be {self.sequence_length + 1}.")
+        
         num_samples = len(data) - self.sequence_length
         num_features = data.shape[1]
 
@@ -99,6 +103,9 @@ class VLSTM:
         Returns:
             tuple: Prepared input sequences (X) and target values (y).
         """
+        if self.target not in features:
+            raise ValueError(f"Target '{self.target}' is not present in the feature list.")
+        
         data = df[features].copy()
         for feature in features:
             scaler = MinMaxScaler(feature_range=(0, 1))
@@ -107,6 +114,7 @@ class VLSTM:
 
         self.target_idx = features.index(self.target)
         return self.create_sequences_optimized(data)
+
 
     def build_model(self, input_shape):
         """
@@ -141,6 +149,10 @@ class VLSTM:
         """
         X, y = self.prepare_data(df, features)
 
+        # Ensure there are enough samples to split
+        if len(X) <= self.sequence_length:
+            raise ValueError("Not enough data to split into training and testing sets.")
+            
         split_ratio = self.train_size
         split = int(split_ratio * len(X))
 
@@ -159,13 +171,13 @@ class VLSTM:
             callbacks.append(EarlyStopping(monitor='val_loss', patience=self.patience, verbose=1))
 
         self.history = self.model.fit(
-        X_train, y_train,
-        epochs=self.epochs,
-        batch_size=self.batch_size,
-        validation_split=0.2,
-        verbose=1,
-        callbacks=callbacks)
-            
+            X_train, y_train,
+            epochs=self.epochs,
+            batch_size=self.batch_size,
+            validation_split=0.2,
+            verbose=1,
+            callbacks=callbacks)
+                
         self.model = load_model(self.best_model_path)
 
         y_pred = self.model.predict(X_test)
@@ -176,10 +188,11 @@ class VLSTM:
         y_train_actual = self.scalers[self.target].inverse_transform(y_train.reshape(-1, 1)).flatten()
         y_train_pred_actual = self.scalers[self.target].inverse_transform(y_train_pred).flatten()
 
-        train_score = r2_score(y_train_actual, y_train_pred_actual)*100
-        test_score = r2_score(y_test_actual, y_pred_actual)*100
+        train_score = round(r2_score(y_train_actual, y_train_pred_actual)*100,2)
+        test_score = round(r2_score(y_test_actual, y_pred_actual)*100,2)
 
         return self.history, y_test_actual, y_pred_actual, train_score, test_score
+
 
     def predict(self, data, features):
         """
@@ -206,13 +219,102 @@ class VLSTM:
         y_cust_pred = self.scalers[self.target].inverse_transform(y_pred).flatten()
         return y_cust_pred
     
-    def evaluate(self, y_actual, y_pred):
+    def forecast(self, data, features, steps, noise_factor=0.02):
+        """
+        Generate multi-step forecasts with noise using the trained model.
+
+        Parameters:
+            data (pd.DataFrame): The input data.
+            features (list): List of feature columns to use.
+            steps (int): Number of steps to forecast.
+            noise_factor (float): Factor to introduce noise in predictions (optional).
+
+        Returns:
+            list: A list of forecasted values with added noise.
+        """
+        # Copy and scale the input data
+        scaled_data = data[features].copy()
+        for feature in features:
+            if feature in self.scalers:
+                scaler = self.scalers[feature]
+                scaled_data[feature] = scaler.transform(data[[feature]])
+            else:
+                raise ValueError(f"Feature '{feature}' not found in scalers. Ensure consistent feature usage.")
+
+        # Start with the last available sequence
+        sequence = scaled_data.values[-self.sequence_length:].copy()
+        forecast = []
+
+        for _ in range(steps):
+            input_seq = np.expand_dims(sequence, axis=0)  # Shape: (1, sequence_length, num_features)
+            
+            # Predict the next step
+            predicted = self.model.predict(input_seq, verbose=0)
+            predicted_value = predicted.flatten()[0]
+            
+            # Add noise to simulate realistic fluctuation
+            noisy_prediction = predicted_value * (1 + np.random.uniform(-noise_factor, noise_factor))
+            
+            forecast.append(noisy_prediction)
+
+            # Update the sequence with the new predicted value
+            new_row = sequence[-1].copy()  # Take the last row as a base for the next step
+            new_row[self.target_idx] = noisy_prediction  # Update the target feature
+            sequence = np.vstack([sequence[1:], new_row])  # Shift the window forward
+
+        # Inverse transform the forecasted target values
+        forecast_actual = self.scalers[self.target].inverse_transform(np.array(forecast).reshape(-1, 1)).flatten()
+        return forecast_actual
+    
+
+    def plot_forecast(self, data, features, steps, noise_factor=0.2):
+        """
+        Plot the original data and forecasted data.
+
+        Parameters:
+            df (pd.DataFrame): The input DataFrame containing the target feature.
+            features (list): List of feature columns to use.
+            steps (int): Number of time steps to forecast.
+            noise_factor (float): The noise factor to add to the forecasted data.
+        """
+
+        original_data = data['Close'].tail(steps).to_list()
+        forecasted_data = self.forecast(data, features, steps, noise_factor)
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(
+            x=list(range(len(data['Close']) - steps, len(data['Close']))), 
+            y=original_data,
+            mode='lines+markers',
+            name='Original Data',
+            line=dict(color='blue')
+        ))
+
+        fig.add_trace(go.Scatter(
+            x=list(range(len(data['Close']), len(data['Close']) + steps)), 
+            y=forecasted_data,
+            mode='lines+markers',
+            name='Forecasted Data',
+            line=dict(color='red', dash='dot') 
+        ))
+
+        fig.update_layout(
+            title='Original Data vs. Forecasted Data',
+            xaxis_title='Time',
+            yaxis_title='Close Price',
+            template='plotly_dark'
+        )
+
+        fig.show()
+
+
+    def evaluate(self, y_actual, y_pred, print_metrics=False):
         """
         Evaluate the model's performance using MAE, RMSE, MAPE, MAD, Explained Variance, Max Error, MSE, and Median Absolute Error.
 
         Parameters:
             y_actual (np.ndarray): The actual target values.
             y_pred (np.ndarray): The predicted target values.
+            print_metrics (bool): If True, print the evaluation metrics. Defaults to False.
 
         Returns:
             dict: A dictionary containing MAE, RMSE, MAPE, MAD, Explained Variance, Max Error, MSE, and Median Absolute Error scores.
@@ -231,19 +333,23 @@ class VLSTM:
         mse = mean_squared_error(y_actual, y_pred)
         median_absolute_error_value = median_absolute_error(y_actual, y_pred)
 
-        print(f"Evaluation Metrics:\n"
-            f"Mean Absolute Error (MAE): {mae:.4f}\n"
-            f"Mean Absolute Percentage Error (MAPE): {mape:.4f}%\n"
-            f"Mean Absolute Deviation (MAD): {mad:.4f}\n"
-            f"Root Mean Squared Error (RMSE): {rmse:.4f}\n"
-            f"Explained Variance Score: {explained_variance:.4f}\n"
-            f"Max Error: {max_error:.4f}\n"
-            f"Mean Squared Error (MSE): {mse:.4f}\n"
-            f"Median Absolute Error: {median_absolute_error_value:.4f}")
+        # Print the metrics if print_metrics is True
+        if print_metrics:
+            print(f"Evaluation Metrics:\n"
+                f"Mean Absolute Error (MAE): {mae:.4f}\n"
+                f"Mean Absolute Percentage Error (MAPE): {mape:.4f}%\n"
+                f"Mean Absolute Deviation (MAD): {mad:.4f}\n"
+                f"Root Mean Squared Error (RMSE): {rmse:.4f}\n"
+                f"Explained Variance Score: {explained_variance:.4f}\n"
+                f"Max Error: {max_error:.4f}\n"
+                f"Mean Squared Error (MSE): {mse:.4f}\n"
+                f"Median Absolute Error: {median_absolute_error_value:.4f}")
 
+        # Return the metrics as a dictionary
         return {'MAE': mae, 'MAPE': mape, 'MAD': mad, 'MSE': mse, 'RMSE': rmse,
-            'Explained Variance': explained_variance, 'Max Error': max_error,
-            'Median Absolute Error': median_absolute_error_value}
+                'Explained Variance': explained_variance, 'Max Error': max_error,
+                'Median Absolute Error': median_absolute_error_value}
+
     
     def summary(self):
         """
@@ -357,6 +463,7 @@ class VLSTM:
             bargap=0.65
         ).show()
 
+
 # Example usage:
 # vlstm = VLSTM(target='Close')
 # history, y_test, y_pred, train_score, test_score = vlstm.train(df, top_features)
@@ -364,6 +471,8 @@ class VLSTM:
 # metrics = vlstm.evaluate(y_test, y_pred)
 # vlstm.plot_metrics(metrics)
 # predictions = vlstm.predict(new_df, features)
+# vlstm.forecast(df,top_features,10,noise_factor=0.025) # Noise is added (if you want to simulate realistic variations in the forecast).
+# vlstm.plot_forecast(df,top_features,30,noise_factor=0.025)
 # vlstm.evaluate(y_test, y_pred)
 # vlstm.plot_loss(history)
 # vlstm.prediction_plot(y_test, y_pred)
