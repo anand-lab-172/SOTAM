@@ -6,6 +6,8 @@
 
 Its versatility makes it suitable for a wide range of real-world applications, from financial market analysis to anomaly detection in IoT systems. Whether you're a data scientist, researcher, or developer, SOTAM-VLSTM simplifies the workflow, improves accuracy, and significantly reduces training time.
 
+![Sotam](https://github.com/user-attachments/assets/d256668d-133a-4e76-b121-e68b5050588e)
+
 **Key Features:**
 - **Customizable LSTM architecture**: Choose the number of layers, units, and other hyperparameters.
 - **Data preprocessing**: Automatic scaling of features using MinMaxScaler to improve model performance.
