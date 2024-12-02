@@ -278,11 +278,11 @@ class VLSTM:
             noise_factor (float): The noise factor to add to the forecasted data.
         """
 
-        original_data = data['Close'].tail(steps).to_list()
+        original_data = data[self.target].tail(steps).to_list()
         forecasted_data = self.forecast(data, features, steps, noise_factor)
         fig = go.Figure()
         fig.add_trace(go.Scatter(
-            x=list(range(len(data['Close']) - steps, len(data['Close']))), 
+            x=list(range(len(data[self.target]) - steps, len(data[self.target]))), 
             y=original_data,
             mode='lines+markers',
             name='Original Data',
@@ -290,7 +290,7 @@ class VLSTM:
         ))
 
         fig.add_trace(go.Scatter(
-            x=list(range(len(data['Close']), len(data['Close']) + steps)), 
+            x=list(range(len(data[self.target]), len(data[self.target]) + steps)), 
             y=forecasted_data,
             mode='lines+markers',
             name='Forecasted Data',
@@ -465,7 +465,7 @@ class VLSTM:
 
 
 # Example usage:
-# vlstm = VLSTM(target='Close')
+# vlstm = VLSTM(target=self.target)
 # history, y_test, y_pred, train_score, test_score = vlstm.train(df, top_features)
 # vlstm.summary()
 # metrics = vlstm.evaluate(y_test, y_pred)
