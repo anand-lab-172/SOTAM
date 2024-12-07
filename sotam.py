@@ -219,88 +219,103 @@ class VLSTM:
         y_cust_pred = self.scalers[self.target].inverse_transform(y_pred).flatten()
         return y_cust_pred
     
-    def forecast(self, data, features, steps, noise_factor=0.02):
+
+    def forecast(self, data, features, forecast_horizon=20, noise_factor=0.2, variance=2.5):
         """
-        Generate multi-step forecasts with noise using the trained model.
-
+        Generates a forecast with added noise to introduce variability.
+        
         Parameters:
-            data (pd.DataFrame): The input data.
-            features (list): List of feature columns to use.
-            steps (int): Number of steps to forecast.
-            noise_factor (float): Factor to introduce noise in predictions (optional).
-
+        - data: DataFrame containing the most recent data to generate the forecast.
+        - features: List of feature column names.
+        - forecast_horizon: Number of future steps to predict.
+        - noise_factor: The standard deviation of random noise added to predictions.
+        
         Returns:
-            list: A list of forecasted values with added noise.
+        - forecast_values: List of forecasted values with noise.
         """
-        # Copy and scale the input data
-        scaled_data = data[features].copy()
+        
+        np.random.seed(42)
+        tf.random.set_seed(42)
+        
+        input_scaled = data[features].copy()
         for feature in features:
-            if feature in self.scalers:
-                scaler = self.scalers[feature]
-                scaled_data[feature] = scaler.transform(data[[feature]])
-            else:
-                raise ValueError(f"Feature '{feature}' not found in scalers. Ensure consistent feature usage.")
-
-        # Start with the last available sequence
-        sequence = scaled_data.values[-self.sequence_length:].copy()
-        forecast = []
-
-        for _ in range(steps):
-            input_seq = np.expand_dims(sequence, axis=0)  # Shape: (1, sequence_length, num_features)
+            input_scaled[feature] = self.scalers[feature].transform(input_scaled[[feature]])
+        
+        recent_data = input_scaled.values[-self.sequence_length:].astype('float32')
+        forecast_values = np.zeros(forecast_horizon)
+        linspace_variance = np.linspace(0, variance, forecast_horizon)
+        
+        for i in range(forecast_horizon):
+            prediction_input = recent_data.reshape(1, self.sequence_length, len(features))
+            predicted_scaled = self.model.predict(prediction_input, verbose=0)
+            predicted_value = self.scalers[self.target].inverse_transform(predicted_scaled).flatten()[0]
             
-            # Predict the next step
-            predicted = self.model.predict(input_seq, verbose=0)
-            predicted_value = predicted.flatten()[0]
-            
-            # Add noise to simulate realistic fluctuation
-            noisy_prediction = predicted_value * (1 + np.random.uniform(-noise_factor, noise_factor))
-            
-            forecast.append(noisy_prediction)
+            noise = np.random.normal(0, noise_factor * predicted_value)
+            forecast_values[i] = max(0, predicted_value + noise)
+        
+        high_trend = forecast_values + linspace_variance + np.random.normal(0, noise_factor * forecast_values, size=forecast_values.shape)
+        low_trend = forecast_values - linspace_variance + np.random.normal(0, noise_factor * forecast_values, size=forecast_values.shape)
+        
+        recent_data[:-1] = recent_data[1:]
+        new_entry = recent_data[-1, :].copy()
+        new_entry[features.index(self.target)] = self.scalers[self.target].transform([[forecast_values[-1]]]).flatten()[0]
+        recent_data[-1] = new_entry
+        
+        return forecast_values, np.maximum(high_trend, forecast_values), np.minimum(low_trend, forecast_values)
 
-            # Update the sequence with the new predicted value
-            new_row = sequence[-1].copy()  # Take the last row as a base for the next step
-            new_row[self.target_idx] = noisy_prediction  # Update the target feature
-            sequence = np.vstack([sequence[1:], new_row])  # Shift the window forward
 
-        # Inverse transform the forecasted target values
-        forecast_actual = self.scalers[self.target].inverse_transform(np.array(forecast).reshape(-1, 1)).flatten()
-        return forecast_actual
-    
-
-    def plot_forecast(self, data, features, steps, noise_factor=0.2):
+    def plot_forecast(self, data, features, steps, noise_factor=0.2, variance=2.5):
         """
-        Plot the original data and forecasted data.
+        Plot the original data, forecasted data, high trend forecast, and low trend forecast.
 
         Parameters:
-            df (pd.DataFrame): The input DataFrame containing the target feature.
+            data (pd.DataFrame): The input DataFrame containing the target feature.
             features (list): List of feature columns to use.
             steps (int): Number of time steps to forecast.
             noise_factor (float): The noise factor to add to the forecasted data.
         """
 
         original_data = data[self.target].tail(steps).to_list()
-        forecasted_data = self.forecast(data, features, steps, noise_factor)
+        forecasted_data, high_trend, low_trend = self.forecast(data, features, steps, noise_factor, variance)
+
         fig = go.Figure()
+
         fig.add_trace(go.Scatter(
-            x=list(range(len(data[self.target]) - steps, len(data[self.target]))), 
+            x=list(range(len(data[self.target]) - steps, len(data[self.target]))),
             y=original_data,
             mode='lines+markers',
             name='Original Data',
-            line=dict(color='blue')
+            line=dict(color='lightblue')
         ))
 
         fig.add_trace(go.Scatter(
-            x=list(range(len(data[self.target]), len(data[self.target]) + steps)), 
+            x=list(range(len(data[self.target]), len(data[self.target]) + steps)),
             y=forecasted_data,
             mode='lines+markers',
             name='Forecasted Data',
-            line=dict(color='red', dash='dot') 
+            line=dict(color='yellowgreen', dash='dot')
+        ))
+
+        fig.add_trace(go.Scatter(
+            x=list(range(len(data[self.target]), len(data[self.target]) + steps)),
+            y=high_trend,
+            mode='lines',
+            name='Possible High Trend',
+            line=dict(color='tomato', dash='dash')
+        ))
+
+        fig.add_trace(go.Scatter(
+            x=list(range(len(data[self.target]), len(data[self.target]) + steps)),
+            y=low_trend,
+            mode='lines',
+            name='Possible Low Trend',
+            line=dict(color='tomato', dash='dash')
         ))
 
         fig.update_layout(
             title='Original Data vs. Forecasted Data',
             xaxis_title='Time',
-            yaxis_title='Close Price',
+            yaxis_title=f'{self.target}',
             template='plotly_dark'
         )
 
@@ -322,7 +337,6 @@ class VLSTM:
         # Ensure no division by zero in MAPE calculation
         non_zero_indices = y_actual != 0
 
-        # Calculate the metrics
         mae = mean_absolute_error(y_actual, y_pred)
         rmse = np.sqrt(mean_squared_error(y_actual, y_pred))
         mape = (np.mean(np.abs((y_actual[non_zero_indices] - y_pred[non_zero_indices]) / y_actual[non_zero_indices])) * 100 
@@ -345,7 +359,6 @@ class VLSTM:
                 f"Mean Squared Error (MSE): {mse:.4f}\n"
                 f"Median Absolute Error: {median_absolute_error_value:.4f}")
 
-        # Return the metrics as a dictionary
         return {'MAE': mae, 'MAPE': mape, 'MAD': mad, 'MSE': mse, 'RMSE': rmse,
                 'Explained Variance': explained_variance, 'Max Error': max_error,
                 'Median Absolute Error': median_absolute_error_value}
@@ -471,8 +484,8 @@ class VLSTM:
 # metrics = vlstm.evaluate(y_test, y_pred)
 # vlstm.plot_metrics(metrics)
 # predictions = vlstm.predict(new_df, features)
-# vlstm.forecast(df,top_features,10,noise_factor=0.025) # Noise is added (if you want to simulate realistic variations in the forecast).
-# vlstm.plot_forecast(df,top_features,30,noise_factor=0.025)
+# forecast, high_trend, low_trend = vlstm.forecast(df,top_features,10,noise_factor=0.02, variance=2.5)
+# vlstm.plot_forecast(df,top_features,10,noise_factor=0.02,variance=2.5)
 # vlstm.evaluate(y_test, y_pred)
 # vlstm.plot_loss(history)
 # vlstm.prediction_plot(y_test, y_pred)
