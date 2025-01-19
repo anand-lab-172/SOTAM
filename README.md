@@ -39,6 +39,7 @@ Its versatility makes it suitable for a wide range of real-world applications, f
 
 ---
 ## Useful links
+[![PyPI Downloads](https://static.pepy.tech/badge/sotam)](https://pepy.tech/projects/sotam)
 - Git Repo: https://github.com/anand-lab-172/SOTAM
 - Developer Profile: https://www.linkedin.com/in/anandaramg
 ---
